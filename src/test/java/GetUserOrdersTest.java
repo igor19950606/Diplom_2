@@ -1,6 +1,7 @@
 import User.ServingUser;
 import User.CreateUser;
 import User.LoginUser;
+import com.github.javafaker.Faker;
 import io.qameta.allure.Step;
 import io.restassured.response.Response;
 import org.junit.After;
@@ -17,13 +18,22 @@ public class GetUserOrdersTest {
     private ServingUser user;
     private String accessToken;
     private CreateUser createUser;
+    private static final Faker faker = new Faker();
 
     @Before
     public void setUp() {
         user = new ServingUser();
-        createUser = new CreateUser("test-users@yandex.ru", "1234", "TestUser");
+        String email = faker.internet().emailAddress();
+        String password = faker.internet().password();
+        String name = faker.name().firstName();
+        createUser = new CreateUser(email, password, name);
         Response createResponse = user.CreateUser(createUser);
         accessToken = createResponse.jsonPath().getString("accessToken");
+        if (accessToken != null) {
+            accessToken = accessToken.replace("Bearer ", "");
+        } else {
+            throw new AssertionError("Не удалось получить токен при создании пользователя.");
+        }
     }
 
     @After
@@ -36,11 +46,7 @@ public class GetUserOrdersTest {
     @Test
     @Step("Получение заказов авторизованного пользователя")
     public void getUserOrdersWithAuthorization() {
-        LoginUser loginUser = LoginUser.fromCreateUser(createUser);
-        Response loginResponse = user.loginUser(loginUser);
-        String newAccessToken = loginResponse.jsonPath().getString("accessToken");
-        newAccessToken = newAccessToken.replace("Bearer ", "");
-        Response ordersResponse = user.getUserOrders(newAccessToken);
+        Response ordersResponse = user.getUserOrders(accessToken);
         assertThat(ordersResponse.statusCode(), equalTo(SC_OK));
         assertThat(ordersResponse.jsonPath().getBoolean("success"), equalTo(true));
         assertThat(ordersResponse.jsonPath().getList("orders"), notNullValue());

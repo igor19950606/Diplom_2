@@ -2,6 +2,7 @@ import User.CreateUser;
 import User.LoginUser;
 import User.OrderService;
 import User.ServingUser;
+import com.github.javafaker.Faker;
 import io.qameta.allure.Step;
 import io.restassured.response.Response;
 import org.junit.After;
@@ -9,6 +10,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+
+import java.util.Arrays;
 
 import static org.apache.http.HttpStatus.*;
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -21,6 +24,7 @@ public class CreateOrderTest {
     private String accessToken;
     private ServingUser user = new ServingUser();
     private OrderService orderService;
+    private static final Faker faker = new Faker();
 
     @Parameterized.Parameter()
     public String[] ingredients;
@@ -39,7 +43,10 @@ public class CreateOrderTest {
 
     @Before
     public void setUp() {
-        createUser = new CreateUser("test-users@yandex.ru", "1234", "TestUser");
+        String email = faker.internet().emailAddress();
+        String password = faker.internet().password();
+        String name = faker.name().firstName();
+        createUser = new CreateUser(email, password, name);
         Response createResponse = user.CreateUser(createUser);
         accessToken = createResponse.jsonPath().getString("accessToken");
         orderService = new OrderService();
@@ -51,8 +58,12 @@ public class CreateOrderTest {
         LoginUser loginUser = LoginUser.fromCreateUser(createUser);
         Response loginResponse = user.loginUser(loginUser);
         String newAccessToken = loginResponse.jsonPath().getString("accessToken");
-        newAccessToken = newAccessToken.replace("Bearer ", "");
-        Response response = orderService.createOrder(ingredients, newAccessToken);
+        if (newAccessToken == null) {
+            System.err.println("Access token is null. Response: " + loginResponse.asString());
+        } else {
+            newAccessToken = newAccessToken.replace("Bearer ", "");
+        }
+        Response response = orderService.createOrder(Arrays.asList(ingredients), newAccessToken);
         assertThat(response, notNullValue());
         assertThat(response.statusCode(), equalTo(SC_OK));
         assertThat(response.jsonPath().getBoolean("success"), equalTo(true));
@@ -75,13 +86,12 @@ public class CreateOrderTest {
     @Test
     @Step("Создание заказа без авторизации и с ингредиентами")
     public void createOrderWithoutAuthorizationWithIngredients() {
-        Response response = orderService.createOrderWithoutAuthWithIngredients(ingredients);
+        Response response = orderService.createOrderWithoutAuthWithIngredients(Arrays.asList(ingredients));
         assertThat(response, notNullValue());
         assertThat(response.statusCode(), equalTo(SC_OK));
         assertThat(response.jsonPath().getBoolean("success"), equalTo(true));
         assertThat(response.jsonPath().getInt("order.number"), notNullValue());
     }
-
 
     @Test
     @Step("Создание заказа без авторизации и без ингредиентов")
@@ -92,13 +102,13 @@ public class CreateOrderTest {
         assertThat(response.jsonPath().getBoolean("success"), equalTo(false));
         assertThat(response.jsonPath().getString("message"), equalTo("Ingredient ids must be provided"));
     }
+
     @Test
     @Step("Создание заказа с невалидным хешем ингредиента")
     public void createOrderWithInvalidIngredientHash() {
         String[] invalidIngredients = {"hash_1", "hash_2"};
-        Response response = orderService.createOrderWithoutAuthWithIngredients(invalidIngredients);
+        Response response = orderService.createOrderWithoutAuthWithIngredients(Arrays.asList(invalidIngredients));
         assertThat(response, notNullValue());
         assertThat(response.statusCode(), equalTo(SC_INTERNAL_SERVER_ERROR));
     }
 }
-

@@ -1,6 +1,7 @@
 import User.CreateUser;
 import User.LoginUser;
 import User.ServingUser;
+import com.github.javafaker.Faker;
 import io.qameta.allure.Step;
 import io.restassured.response.Response;
 import org.apache.http.HttpStatus;
@@ -12,9 +13,10 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 public class UserLoginTest {
-    private ServingUser user = new ServingUser();
+    private ServingUser user;
     private CreateUser createuser;
     private String accessToken;
+    private static final Faker faker = new Faker();
 
     @After
     public void UserCleaning() {
@@ -25,7 +27,9 @@ public class UserLoginTest {
 
     @Before
     public void before() {
-        createuser = new CreateUser("test-users@yandex.ru", "1234", "TestUser");
+        user = new ServingUser();
+        String email = faker.internet().emailAddress();
+        createuser = new CreateUser(email, "1234", "TestUser");
         Response createResponse = user.CreateUser(createuser);
         accessToken = createResponse.jsonPath().getString("accessToken");
     }
@@ -35,34 +39,40 @@ public class UserLoginTest {
     public void userLoginSuccess() {
         LoginUser loginUser = LoginUser.fromCreateUser(createuser);
         Response loginResponse = user.loginUser(loginUser);
-        loginResponse.then().assertThat().statusCode(HttpStatus.SC_OK);
+        assertResponseStatus(loginResponse, HttpStatus.SC_OK);
     }
+
     @Test
     @Step("Логин с неверным логином и паролем")
     public void userLoginWithInvalid() {
         LoginUser invalidLoginUser = new LoginUser("test-usersNull@yandex.ru", "TestUser");
         Response loginResponse = user.loginUser(invalidLoginUser);
-        loginResponse.then().assertThat().statusCode(HttpStatus.SC_UNAUTHORIZED);
-        String errorMessage = loginResponse.jsonPath().getString("message");
-        assertThat(errorMessage, is("email or password are incorrect"));
+        assertResponseStatus(loginResponse, HttpStatus.SC_UNAUTHORIZED);
+        assertErrorMessage(loginResponse, "email or password are incorrect");
     }
 
     @Test
     @Step("Логин с отсутствующим полем password")
     public void userLoginWithMissingFieldPassword() {
-        LoginUser missingPasswordUser = new LoginUser("test-users@yandex.ru", "");
+        LoginUser missingPasswordUser = new LoginUser(createuser.getEmail(), "");
         Response loginResponse = user.loginUser(missingPasswordUser);
-        loginResponse.then().assertThat().statusCode(HttpStatus.SC_UNAUTHORIZED);
-        String errorMessage = loginResponse.jsonPath().getString("message");
-        assertThat(errorMessage, is("email or password are incorrect"));
+        assertResponseStatus(loginResponse, HttpStatus.SC_UNAUTHORIZED);
+        assertErrorMessage(loginResponse, "email or password are incorrect");
     }
+
     @Test
     @Step("Логин с отсутствующим полем email")
     public void userLoginWithMissingFieldEmail() {
-        LoginUser missingPasswordUser = new LoginUser("", "1234");
-        Response loginResponse = user.loginUser(missingPasswordUser);
-        loginResponse.then().assertThat().statusCode(HttpStatus.SC_UNAUTHORIZED);
-        String errorMessage = loginResponse.jsonPath().getString("message");
-        assertThat(errorMessage, is("email or password are incorrect"));
+        LoginUser missingEmailUser = new LoginUser("", "1234");
+        Response loginResponse = user.loginUser(missingEmailUser);
+        assertResponseStatus(loginResponse, HttpStatus.SC_UNAUTHORIZED);
+        assertErrorMessage(loginResponse, "email or password are incorrect");
+    }
+    private void assertResponseStatus(Response response, int expectedStatus) {
+        assertThat(response.statusCode(), is(expectedStatus));
+    }
+    private void assertErrorMessage(Response response, String expectedMessage) {
+        String errorMessage = response.jsonPath().getString("message");
+        assertThat(errorMessage, is(expectedMessage));
     }
 }

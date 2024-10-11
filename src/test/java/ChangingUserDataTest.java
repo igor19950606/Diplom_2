@@ -2,6 +2,7 @@ import User.CreateUser;
 import User.LoginUser;
 import User.ServingUser;
 import User.UserData;
+import com.github.javafaker.Faker;
 import io.restassured.response.Response;
 import org.junit.After;
 import org.junit.Before;
@@ -19,6 +20,7 @@ public class ChangingUserDataTest {
     private String accessToken;
     private ServingUser user = new ServingUser();
     private Response response;
+    private static final Faker faker = new Faker();
 
     @After
     public void userCleaning() {
@@ -29,7 +31,10 @@ public class ChangingUserDataTest {
 
     @Before
     public void setUp() {
-        createUser = new CreateUser("test-users@yandex.ru", "1234", "TestUser");
+        String email = faker.internet().emailAddress();
+        String password = faker.internet().password();
+        String name = faker.name().firstName();
+        createUser = new CreateUser(email, password, name);
         Response createResponse = user.CreateUser(createUser);
         accessToken = createResponse.jsonPath().getString("accessToken");
     }
@@ -43,21 +48,23 @@ public class ChangingUserDataTest {
         newAccessToken = newAccessToken.replace("Bearer ", "");
         assertThat(loginResponse, notNullValue());
         assertThat(loginResponse.statusCode(), equalTo(SC_OK));
-        UserData updatedData = new UserData("UpdatedTestUser", "updated-test-users@yandex.ru");
+        String newName = faker.name().firstName();
+        String newEmail = faker.internet().emailAddress();
+        UserData updatedData = new UserData(newName, newEmail);
         response = user.updateUser("Bearer " + newAccessToken, updatedData);
         int statusCode = response.statusCode();
         assertThat(response, notNullValue());
         assertThat(statusCode, equalTo(SC_OK));
         String updatedName = response.jsonPath().getString("user.name");
         String updatedEmail = response.jsonPath().getString("user.email");
-        assertThat(updatedName, equalTo("UpdatedTestUser"));
-        assertThat(updatedEmail, equalTo("updated-test-users@yandex.ru"));
+        assertThat(updatedName, equalTo(newName));
+        assertThat(updatedEmail, equalTo(newEmail));
     }
 
     @Test
     @Step("Изменение данных пользователя без авторизации")
     public void updateUserDataWithoutAuthorization() {
-        UserData updatedData = new UserData("TestUser", "test-users@yandex.ru");
+        UserData updatedData = new UserData(faker.name().firstName(), faker.internet().emailAddress());
         response = user.updateUserWithoutAuth(updatedData);
         int statusCode = response.statusCode();
         assertThat(response, notNullValue());
